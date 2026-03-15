@@ -1,0 +1,27 @@
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Backend
+backend/venv/
+backend/__pycache__/
+backend/**/__pycache__/
+*.pyc
+*.pyo
+
+# Frontend (covered by frontend/.gitignore when in subdir)
+node_modules/
+.next/
+out/
+build/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+*.log
+.idea/
+.vscode/
+
+# Optional: keep Excel/output out of repo if large
+# *.xlsx

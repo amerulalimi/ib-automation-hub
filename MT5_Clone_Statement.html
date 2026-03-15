@@ -1,0 +1,300 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+  <head>
+    <title>12345678: Ahmad Trader - Trade History Report</title>
+    <meta name="generator" content="client terminal">
+    <style type="text/css">
+    <!--
+    @media screen {
+      td { font: 8pt  Tahoma,Arial; }
+      th { font: 10pt Tahoma,Arial; }
+    }
+    @media print {
+      td { font: 7pt Tahoma,Arial; }
+      th { font: 9pt Tahoma,Arial; }
+    }
+    .msdate { mso-number-format:"General Date"; }
+    .mspt   { mso-number-format:\#\,\#\#0\.00;  }
+    .hidden { display: none; }
+    body    {margin:1px;}
+    //-->
+    </style>
+  </head>
+<body>
+<div align="center">
+    <table cellspacing="1" cellpadding="3" border="0">
+
+        <!-- ====================================================
+             BLOK 1: HEADER AKAUN
+             Memaparkan maklumat pemilik akaun di bahagian atas.
+             ==================================================== -->
+        <tr align="center">
+            <td colspan="14"><div style="font: 14pt Tahoma"><b>Trade History Report</b><br></div></td>
+        </tr>
+        <tr align="left">
+            <th colspan="4" nowrap align="right" style="width: 220px; height: 20px">Name:</th>
+            <th colspan="10" nowrap align="left" style="width: 220px; height: 20px"><b>Ahmad Trader</b></th>
+        </tr>
+        <tr align="left">
+            <th colspan="4" nowrap align="right" style="width: 220px; height: 20px">Account:</th>
+            <th colspan="10" nowrap align="left" style="width: 220px; height: 20px"><b>12345678&nbsp;(USD,&nbsp;BrokerXYZ-Live,&nbsp;real,&nbsp;Hedge)</b></th>
+        </tr>
+        <tr align="left">
+            <th colspan="4" nowrap align="right" style="width: 220px; height: 20px">Company:</th>
+            <th colspan="10" nowrap align="left" style="width: 220px; height: 20px"><b>Broker XYZ International</b></th>
+        </tr>
+        <tr align="left">
+            <th colspan="4" nowrap align="right" style="width: 220px; height: 20px">Date:</th>
+            <th colspan="10" nowrap align="left" style="width: 220px; height: 20px"><b>2026.03.04 12:00</b></th>
+        </tr>
+
+        <!-- ====================================================
+             BLOK 2: SPACER LAJUR
+             Baris kosong ini menentukan lebar setiap lajur (14 lajur).
+             Browser menggunakan nilai "width" ini sebagai panduan
+             untuk semua baris jadual yang berikutnya.
+             ==================================================== -->
+        <tr>
+            <td nowrap style="width: 140px; height: 10px"></td>  <!-- Lajur 1:  Open Time        -->
+            <td nowrap style="width:  60px;"></td>               <!-- Lajur 2:  Position/Ticket   -->
+            <td nowrap style="width:  60px;"></td>               <!-- Lajur 3:  Symbol            -->
+            <td nowrap style="width:  60px;"></td>               <!-- Lajur 4:  Type              -->
+            <td nowrap style="width:  70px;"></td>               <!-- Lajur 5:  Volume            -->
+            <td nowrap style="width:  60px;"></td>               <!-- Lajur 6:  Open Price        -->
+            <td nowrap style="width:  60px;"></td>               <!-- Lajur 7:  S/L               -->
+            <td nowrap style="width:  60px;"></td>               <!-- Lajur 8:  T/P               -->
+            <td nowrap style="width: 140px;"></td>               <!-- Lajur 9:  Close Time        -->
+            <td nowrap style="width:  60px;"></td>               <!-- Lajur 10: Close Price       -->
+            <td nowrap style="width:  60px;"></td>               <!-- Lajur 11: Commission        -->
+            <td nowrap style="width:  60px;"></td>               <!-- Lajur 12: Swap              -->
+            <td nowrap style="width:  60px;"></td>               <!-- Lajur 13: Profit (bahagian A) -->
+            <td nowrap style="width: 100px;"></td>               <!-- Lajur 14: Profit (bahagian B) -->
+        </tr>
+
+        <!-- ====================================================
+             BLOK 3: TAJUK BAHAGIAN "POSITIONS"
+             Memaparkan tajuk bahagian dan label setiap lajur.
+             bgcolor="#E5F0FC" = biru muda (warna header MT5)
+             ==================================================== -->
+        <tr align="center">
+            <th colspan="14" style="height: 25px"><div style="font: 10pt Tahoma"><b>Positions</b></div></th>
+        </tr>
+        <tr align="center" bgcolor="#E5F0FC">
+            <td nowrap style="height: 30px"><b>Time</b></td>
+            <td nowrap><b>Position</b></td>
+            <td nowrap><b>Symbol</b></td>
+            <td nowrap><b>Type</b></td>
+            <td nowrap><b>Volume</b></td>
+            <td nowrap><b>Price</b></td>
+            <td nowrap><b>S / L</b></td>
+            <td nowrap><b>T / P</b></td>
+            <td nowrap><b>Time</b></td>
+            <td nowrap><b>Price</b></td>
+            <td nowrap><b>Commission</b></td>
+            <td nowrap><b>Swap</b></td>
+            <td nowrap colspan="2"><b>Profit</b></td>
+        </tr>
+
+        <!-- ====================================================
+             BLOK 4: BARIS DATA TRADE
+             Setiap baris dijanakan oleh fungsi generate_trade_row().
+             Perhatikan sel tersembunyi <td class="hidden" colspan="8">
+             yang menjadi ciri khas format MT5 Positions.
+             ==================================================== -->
+
+        <tr bgcolor="#FFFFFF" align="right">
+            <td>2026.03.01 09:15:30</td>
+            <td>100001001</td>
+            <td>XAUUSD</td>
+            <td>buy</td>
+            <td class="hidden" colspan="8"></td>
+            <td class="">0.01</td>
+            <td class="">2850.50</td>
+            <td class="">2840.00</td>
+            <td class="">2860.00</td>
+            <td class="">2026.03.01 09:45:22</td>
+            <td class="">2853.50</td>
+            <td class="">0.00</td>
+            <td class="">0.00</td>
+            <td colspan="2">3.00</td>
+        </tr>
+        <tr bgcolor="#F7F7F7" align="right">
+            <td>2026.03.01 10:20:15</td>
+            <td>100001002</td>
+            <td>EURUSD</td>
+            <td>buy</td>
+            <td class="hidden" colspan="8"></td>
+            <td class="">0.01</td>
+            <td class="">1.08200</td>
+            <td class="">1.07800</td>
+            <td class="">1.08600</td>
+            <td class="">2026.03.01 11:05:43</td>
+            <td class="">1.08600</td>
+            <td class="">0.00</td>
+            <td class="">0.00</td>
+            <td colspan="2">4.00</td>
+        </tr>
+        <tr bgcolor="#FFFFFF" align="right">
+            <td>2026.03.02 08:30:10</td>
+            <td>100001003</td>
+            <td>GBPUSD</td>
+            <td>sell</td>
+            <td class="hidden" colspan="8"></td>
+            <td class="">0.01</td>
+            <td class="">1.26900</td>
+            <td class="">1.27300</td>
+            <td class="">1.26500</td>
+            <td class="">2026.03.02 09:10:55</td>
+            <td class="">1.26500</td>
+            <td class="">0.00</td>
+            <td class="">0.00</td>
+            <td colspan="2">4.00</td>
+        </tr>
+        <tr bgcolor="#F7F7F7" align="right">
+            <td>2026.03.02 14:05:30</td>
+            <td>100001004</td>
+            <td>XAUUSD</td>
+            <td>buy</td>
+            <td class="hidden" colspan="8"></td>
+            <td class="">0.01</td>
+            <td class="">2870.00</td>
+            <td class="">2858.00</td>
+            <td class="">2882.00</td>
+            <td class="">2026.03.02 14:35:12</td>
+            <td class="">2875.00</td>
+            <td class="">0.00</td>
+            <td class="">0.00</td>
+            <td colspan="2">5.00</td>
+        </tr>
+        <tr bgcolor="#FFFFFF" align="right">
+            <td>2026.03.03 07:45:00</td>
+            <td>100001005</td>
+            <td>EURUSD</td>
+            <td>sell</td>
+            <td class="hidden" colspan="8"></td>
+            <td class="">0.01</td>
+            <td class="">1.09100</td>
+            <td class="">1.09500</td>
+            <td class="">1.08650</td>
+            <td class="">2026.03.03 08:20:30</td>
+            <td class="">1.08650</td>
+            <td class="">0.00</td>
+            <td class="">0.00</td>
+            <td colspan="2">4.50</td>
+        </tr>
+
+        <!-- ====================================================
+             BLOK 5: BARIS JUMLAH KESELURUHAN (TOTALS ROW)
+             Menunjukkan: Commission | Swap | 0.00 | Net Profit | Final Balance
+             ==================================================== -->
+
+        <tr align="right">
+            <td nowrap colspan="8" style="height: 30px"></td>
+            <td nowrap><b>0.00</b></td>
+            <td nowrap><b>0.00</b></td>
+            <td nowrap><b>0.00</b></td>
+            <td nowrap><b>20.50</b></td>
+            <td nowrap><b>120.50</b></td>
+            <td nowrap></td>
+        </tr>
+
+        <!-- Spacer antara jadual trade dan bahagian baki -->
+        <tr align="right">
+            <td colspan="13" style="height: 10px"></td>
+        </tr>
+
+        <!-- ====================================================
+             BLOK 6: BAHAGIAN BAKI AKAUN (ACCOUNT BALANCE SECTION)
+             Menunjukkan ringkasan kewangan akaun semasa.
+             ==================================================== -->
+        <tr align="right">
+            <td colspan="3" style="height: 20px">Balance:</td>
+            <td colspan="2"><b>120.50</b></td>
+            <td></td>
+            <td colspan="3">Free Margin:</td>
+            <td colspan="2"><b>120.50</b></td>
+        </tr>
+        <tr align="right">
+            <td colspan="3" style="height: 20px">Credit Facility:</td>
+            <td colspan="2"><b>0.00</b></td>
+            <td></td>
+            <td colspan="3">Margin:</td>
+            <td colspan="2"><b>0.00</b></td>
+        </tr>
+        <tr align="right">
+            <td colspan="3" style="height: 20px">Floating P/L:</td>
+            <td colspan="2"><b>0.00</b></td>
+            <td></td>
+            <td colspan="3">Margin Level:</td>
+            <td colspan="2"><b>0.00%</b></td>
+        </tr>
+        <tr align="right">
+            <td colspan="3" style="height: 20px">Equity:</td>
+            <td colspan="2"><b>120.50</b></td>
+        </tr>
+
+        <!-- Spacer antara bahagian baki dan keputusan -->
+        <tr align="right">
+            <td colspan="13" style="height: 10px"></td>
+        </tr>
+
+        <!-- ====================================================
+             BLOK 7: BAHAGIAN KEPUTUSAN STATISTIK (RESULTS SECTION)
+             Menunjukkan analisis prestasi keseluruhan trading.
+             ==================================================== -->
+        <tr>
+            <td colspan="13" align="center"><div style="font: 10pt Tahoma"><b>Results</b></div></td>
+        </tr>
+        <tr align="right">
+            <td nowrap colspan="3">Total Net Profit:</td>
+            <td nowrap><b>20.50</b></td>
+            <td nowrap colspan="3">Gross Profit:</td>
+            <td nowrap><b>20.50</b></td>
+            <td nowrap colspan="3">Gross Loss:</td>
+            <td nowrap colspan="2"><b>0.00</b></td>
+        </tr>
+        <tr align="right">
+            <td nowrap colspan="3">Profit Factor:</td>
+            <td nowrap><b>0.00</b></td>
+            <td nowrap colspan="3">Expected Payoff:</td>
+            <td nowrap><b>4.10</b></td>
+        </tr>
+        <tr>
+            <td nowrap style="height: 10px"></td>
+        </tr>
+        <tr align="right">
+            <td nowrap colspan="3">Total Trades:</td>
+            <td nowrap><b>5</b></td>
+            <td nowrap colspan="3">Short Trades (won %):</td>
+            <td nowrap><b>2 (100.00%)</b></td>
+            <td nowrap colspan="3">Long Trades (won %):</td>
+            <td nowrap colspan="2"><b>3 (100.00%)</b></td>
+        </tr>
+        <tr align="right">
+            <td nowrap colspan="4"></td>
+            <td nowrap colspan="3">Profit Trades (% of total):</td>
+            <td nowrap><b>5 (100.00%)</b></td>
+            <td nowrap colspan="3">Loss Trades (% of total):</td>
+            <td nowrap colspan="2"><b>0 (0.00%)</b></td>
+        </tr>
+        <tr align="right">
+            <td nowrap colspan="4"></td>
+            <td nowrap colspan="3">Largest profit trade:</td>
+            <td nowrap><b>5.00</b></td>
+            <td nowrap colspan="3">Largest loss trade:</td>
+            <td nowrap colspan="2"><b>3.00</b></td>
+        </tr>
+        <tr align="right">
+            <td nowrap colspan="4"></td>
+            <td nowrap colspan="3">Average profit trade:</td>
+            <td nowrap><b>4.10</b></td>
+            <td nowrap colspan="3">Average loss trade:</td>
+            <td nowrap colspan="2"><b>0.00</b></td>
+        </tr>
+        <tr>
+            <td nowrap style="height: 10px"></td>
+        </tr>
+    </table>
+</div>
+</body>
+</html>
