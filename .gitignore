@@ -5,10 +5,18 @@
 
 # Backend
 backend/venv/
+.venv/
+backend/.venv/
 backend/__pycache__/
 backend/**/__pycache__/
 *.pyc
 *.pyo
+
+# Celery Beat (local scheduler state)
+backend/celerybeat-schedule*
+
+# Local scratch
+tmp/
 
 # Frontend (covered by frontend/.gitignore when in subdir)
 node_modules/
