@@ -8,6 +8,7 @@ from sqlalchemy import text as sqlt
 
 from auth import require_auth, encrypt_token, decrypt_token
 from database import get_engine, get_session
+from rbac import assert_not_viewer, auth_role, auth_uid, assert_channel_access
 from models import (
     TelethonAccountCreate,
     TelethonAccountUpdate,
@@ -50,6 +51,7 @@ async def list_telethon_accounts(_auth=Depends(require_auth)):
 
 @router.post("/telethon-accounts", status_code=201)
 async def create_telethon_account(body: TelethonAccountCreate, _auth=Depends(require_auth)):
+    assert_not_viewer(auth_role(_auth))
     acc_id = str(uuid.uuid4())
 
     def _ins(db):
@@ -66,6 +68,8 @@ async def create_telethon_account(body: TelethonAccountCreate, _auth=Depends(req
 
 @router.patch("/telethon-accounts/{account_id}")
 async def update_telethon_account(account_id: str, body: TelethonAccountUpdate, _auth=Depends(require_auth)):
+    assert_not_viewer(auth_role(_auth))
+
     def _up(db):
         updates = []
         params = {"id": account_id}
@@ -103,6 +107,8 @@ async def update_telethon_account(account_id: str, body: TelethonAccountUpdate, 
 
 @router.delete("/telethon-accounts/{account_id}")
 async def delete_telethon_account(account_id: str, _auth=Depends(require_auth)):
+    assert_not_viewer(auth_role(_auth))
+
     def _del(db):
         db.execute(sqlt("DELETE FROM telethon_accounts WHERE id = :id"), {"id": account_id})
         db.commit()
@@ -127,6 +133,7 @@ async def list_source_channels(_auth=Depends(require_auth)):
 
 @router.post("/source-channels", status_code=201)
 async def create_source_channel(body: SourceChannelCreate, _auth=Depends(require_auth)):
+    assert_not_viewer(auth_role(_auth))
     ch_id = str(uuid.uuid4())
 
     def _ins(db):
@@ -143,6 +150,8 @@ async def create_source_channel(body: SourceChannelCreate, _auth=Depends(require
 
 @router.patch("/source-channels/{channel_id}")
 async def update_source_channel(channel_id: str, body: SourceChannelUpdate, _auth=Depends(require_auth)):
+    assert_not_viewer(auth_role(_auth))
+
     def _up(db):
         updates = []
         params = {"id": channel_id}
@@ -173,6 +182,8 @@ async def update_source_channel(channel_id: str, body: SourceChannelUpdate, _aut
 
 @router.delete("/source-channels/{channel_id}")
 async def delete_source_channel(channel_id: str, _auth=Depends(require_auth)):
+    assert_not_viewer(auth_role(_auth))
+
     def _del(db):
         db.execute(sqlt("DELETE FROM source_channels WHERE id = :id"), {"id": channel_id})
         db.commit()
@@ -197,9 +208,13 @@ async def list_forward_rules(_auth=Depends(require_auth)):
 
 @router.post("/forward-rules", status_code=201)
 async def create_forward_rule(body: ForwardRuleCreate, _auth=Depends(require_auth)):
+    assert_not_viewer(auth_role(_auth))
+    role = auth_role(_auth)
+    uid = auth_uid(_auth)
     rule_id = str(uuid.uuid4())
 
     def _ins(db):
+        assert_channel_access(db, body.destination_channel_id.strip(), role, uid)
         db.execute(sqlt("""
             INSERT INTO forward_rules (id, source_channel_id, destination_channel_id, created_at)
             VALUES (:id, :sid, :did, NOW())
@@ -218,11 +233,30 @@ async def create_forward_rule(body: ForwardRuleCreate, _auth=Depends(require_aut
 
 @router.delete("/forward-rules/{rule_id}")
 async def delete_forward_rule(rule_id: str, _auth=Depends(require_auth)):
-    def _del(db):
-        db.execute(sqlt("DELETE FROM forward_rules WHERE id = :id"), {"id": rule_id})
-        db.commit()
+    assert_not_viewer(auth_role(_auth))
+    role = auth_role(_auth)
+    uid = auth_uid(_auth)
 
-    await _run_db(_del)
+    def _del():
+        get_engine()
+        db = get_session()
+        try:
+            row = db.execute(
+                sqlt("SELECT destination_channel_id FROM forward_rules WHERE id = :id"),
+                {"id": rule_id},
+            ).fetchone()
+            if not row:
+                return "not_found"
+            assert_channel_access(db, row[0], role, uid)
+            db.execute(sqlt("DELETE FROM forward_rules WHERE id = :id"), {"id": rule_id})
+            db.commit()
+            return "ok"
+        finally:
+            db.close()
+
+    result = await asyncio.to_thread(_del)
+    if result == "not_found":
+        raise HTTPException(status_code=404, detail="Forward rule not found")
     return {"success": True}
 
 
@@ -230,12 +264,14 @@ async def delete_forward_rule(rule_id: str, _auth=Depends(require_auth)):
 
 @router.post("/forwarder/start")
 async def forwarder_start(_auth=Depends(require_auth)):
+    assert_not_viewer(auth_role(_auth))
     await start_listener()
     return {"success": True, "running": is_running()}
 
 
 @router.post("/forwarder/stop")
 async def forwarder_stop(_auth=Depends(require_auth)):
+    assert_not_viewer(auth_role(_auth))
     await stop_listener()
     return {"success": True, "running": is_running()}
 

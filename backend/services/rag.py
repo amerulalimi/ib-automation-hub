@@ -1,21 +1,24 @@
 """RAG with pgvector: ingest and query with channel_id metadata filtering (multi-tenant)."""
-import os
 import uuid
-from typing import Optional
 
 from sqlalchemy import text as sqlt
 
 from database import get_engine, get_session
+from services.openai_credentials import build_openai_client_for_channel
 
 EMBEDDING_DIM = 1536
 
 
-def _get_embedding(text: str) -> list[float]:
+def _get_embedding(channel_id: str, text: str) -> list[float]:
     try:
-        from openai import OpenAI
-        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        r = client.embeddings.create(model="text-embedding-3-small", input=text)
-        return r.data[0].embedding
+        get_engine()
+        db = get_session()
+        try:
+            client = build_openai_client_for_channel(db, channel_id)
+            r = client.embeddings.create(model="text-embedding-3-small", input=text)
+            return r.data[0].embedding
+        finally:
+            db.close()
     except Exception:
         return [0.0] * EMBEDDING_DIM
 
@@ -40,7 +43,7 @@ def ingest_sync(channel_id: str, text: str) -> list[str]:
     created = []
     try:
         for c in chunks:
-            emb = _get_embedding(c)
+            emb = _get_embedding(channel_id, c)
             ch_id = str(uuid.uuid4())
             db.execute(
                 sqlt("""
@@ -61,7 +64,7 @@ def ingest_sync(channel_id: str, text: str) -> list[str]:
 
 def query_sync(channel_id: str, question: str, k: int = 5) -> list[dict]:
     """Get embedding for question, similarity search in knowledge_chunks WHERE channel_id = :channel_id, return top k chunks."""
-    emb = _get_embedding(question)
+    emb = _get_embedding(channel_id, question)
     emb_str = "[" + ",".join(map(str, emb)) + "]"
     get_engine()
     db = get_session()
@@ -83,13 +86,77 @@ def query_sync(channel_id: str, question: str, k: int = 5) -> list[dict]:
         db.close()
 
 
+def list_chunks_sync(channel_id: str, limit: int = 200) -> list[dict]:
+    """List knowledge chunks for a channel (no embedding payload)."""
+    limit = max(1, min(500, limit))
+    get_engine()
+    db = get_session()
+    try:
+        rows = db.execute(
+            sqlt("""
+                SELECT id, channel_id, LEFT(content, 500) AS preview, metadata, created_at
+                FROM knowledge_chunks
+                WHERE channel_id = :channel_id
+                ORDER BY created_at DESC
+                LIMIT :lim
+            """),
+            {"channel_id": channel_id, "lim": limit},
+        ).fetchall()
+        return [
+            {
+                "id": r[0],
+                "channel_id": r[1],
+                "preview": r[2],
+                "metadata": r[3],
+                "created_at": r[4].isoformat() if r[4] else None,
+            }
+            for r in rows
+        ]
+    finally:
+        db.close()
+
+
+def count_chunks_sync(channel_id: str) -> int:
+    get_engine()
+    db = get_session()
+    try:
+        n = db.execute(
+            sqlt("SELECT COUNT(*) FROM knowledge_chunks WHERE channel_id = :cid"),
+            {"cid": channel_id},
+        ).scalar()
+        return int(n or 0)
+    finally:
+        db.close()
+
+
+def delete_chunk_sync(chunk_id: str, channel_id: str) -> bool:
+    get_engine()
+    db = get_session()
+    try:
+        r = db.execute(
+            sqlt("DELETE FROM knowledge_chunks WHERE id = :id AND channel_id = :cid"),
+            {"id": chunk_id, "cid": channel_id},
+        )
+        db.commit()
+        return r.rowcount > 0
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
 def answer_with_rag_sync(channel_id: str, question: str, k: int = 5) -> str:
     """Retrieve top k chunks for channel_id, then LLM answer using context. Multi-tenant: only channel_id chunks."""
     chunks = query_sync(channel_id, question, k=k)
     context = "\n\n".join(c["content"] for c in chunks) if chunks else ""
     try:
-        from openai import OpenAI
-        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        get_engine()
+        db = get_session()
+        try:
+            client = build_openai_client_for_channel(db, channel_id)
+        finally:
+            db.close()
         r = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[

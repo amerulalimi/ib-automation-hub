@@ -1,11 +1,12 @@
 """AI batch content generation: create 30-365 days of posts by topic, save to scheduled_contents."""
-import os
 import uuid
 from datetime import datetime, timedelta
+from typing import Optional
 
 from sqlalchemy import text as sqlt
 
 from database import get_engine, get_session
+from services.openai_credentials import build_openai_client_for_channel
 
 
 def get_channel_timezone(channel_id: str) -> str:
@@ -31,10 +32,12 @@ def generate_batch_content_sync(topic: str, channel_id: str, days: int, post_hou
         from openai import OpenAI
     except ImportError:
         raise RuntimeError("openai package required for AI content generation")
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        raise RuntimeError("OPENAI_API_KEY not set")
-    client = OpenAI(api_key=api_key)
+    get_engine()
+    db = get_session()
+    try:
+        client = build_openai_client_for_channel(db, channel_id)
+    finally:
+        db.close()
     # Ask for N post ideas (one per day or fewer if 365)
     num_posts = min(days, 365)
     prompt = f"""Generate exactly {num_posts} short social media post texts for a Telegram channel about: {topic}.
@@ -86,8 +89,72 @@ Do not include any other commentary."""
                 """),
                 {"id": sc_id, "channel_id": channel_id, "content": content, "scheduled_at": scheduled.isoformat()},
             )
-            created.append({"id": sc_id, "scheduled_at": scheduled.isoformat(), "content_preview": content[:80] + "..." if len(content) > 80 else content})
         db.commit()
     finally:
         db.close()
     return created
+
+
+def bulk_generate_content(
+    topic: str,
+    days: int = 30,
+    *,
+    api_key: str,
+    base_url: Optional[str] = None,
+) -> list[dict]:
+    """
+    Generate multiple unique posts using OpenAI.
+    Focus on Gold Trading (tips, motivation, market analysis).
+    Output is beautiful Markdown (bold, lists, emojis).
+    Returns a list of dicts: [{"content": "...", "scheduled_at": "..."}]
+    """
+    try:
+        from openai import OpenAI
+    except ImportError:
+        raise RuntimeError("openai package required for AI content generation")
+
+    kwargs = {"api_key": api_key}
+    if base_url:
+        kwargs["base_url"] = base_url
+    client = OpenAI(**kwargs)
+
+    prompt = f"""You are a professional Gold Trading expert for a premium Telegram channel.
+Please generate {days} unique social media posts based on the topic: '{topic}'.
+Vary the content types among: Gold trading tips, trader motivation, and market analysis.
+Each post must use beautiful Telegram-friendly Markdown formatting (use bold, lists, and emojis) so it looks professional and engaging.
+
+Output EXACTLY and ONLY a valid JSON array of objects.
+Each object must have the following keys:
+- "content": The generated post text in Markdown.
+- "scheduled_at": An ISO 8601 timestamp string representing when the post should be published. Schedule the first post for tomorrow at 09:00:00 UTC, the second for the day after tomorrow at 09:00:00 UTC, and so on.
+
+Do NOT include markdown code blocks (like ```json) in your response, just the raw JSON.
+"""
+
+    r = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=4000,
+        temperature=0.7,
+    )
+
+    if not r.choices or not r.choices[0].message.content:
+        return []
+
+    text = r.choices[0].message.content.strip()
+
+    if text.startswith("```json"):
+        text = text[7:]
+    if text.startswith("```"):
+        text = text[3:]
+    if text.endswith("```"):
+        text = text[:-3]
+    text = text.strip()
+
+    import json
+    try:
+        posts = json.loads(text)
+        return posts
+    except Exception as e:
+        print(f"Error parsing JSON from OpenAI: {e}")
+        return []

@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+          POSTGRES_DB: app
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U app -d app"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+
+    env:
+      DATABASE_URL: postgresql+psycopg2://app:app@localhost:5432/app
+      REDIS_URL: redis://localhost:6379/0
+      JWT_SECRET: ci-test-jwt-secret-must-be-long-enough-for-hs256!!
+      MASTER_ENCRYPTION_KEY: ci_master_key_16chars
+      SECRET_SIGNAL_KEY: ci-signal-secret
+      PYTHONPATH: ${{ github.workspace }}/backend
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements-ci.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-ci.txt
+
+      - name: Alembic upgrade
+        run: alembic upgrade head
+
+      - name: Pytest
+        run: pytest -q --tb=short

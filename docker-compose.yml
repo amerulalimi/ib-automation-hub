@@ -1,0 +1,86 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: app
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d app"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg2://app:app@db:5432/app
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-use-long-random-string}
+      MASTER_ENCRYPTION_KEY: ${MASTER_ENCRYPTION_KEY:-minimum-sixteen-chars!!}
+      SECRET_SIGNAL_KEY: ${SECRET_SIGNAL_KEY:-dev-signal-key}
+      DASHBOARD_EMAIL: ${DASHBOARD_EMAIL:-}
+      DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD:-}
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: ["celery", "-A", "celery_app", "worker", "-l", "INFO"]
+    environment:
+      DATABASE_URL: postgresql+psycopg2://app:app@db:5432/app
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-use-long-random-string}
+      MASTER_ENCRYPTION_KEY: ${MASTER_ENCRYPTION_KEY:-minimum-sixteen-chars!!}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: ["celery", "-A", "celery_app", "beat", "-l", "INFO"]
+    environment:
+      DATABASE_URL: postgresql+psycopg2://app:app@db:5432/app
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  flower:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: ["celery", "-A", "celery_app", "flower", "--port=5555"]
+    environment:
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+
+volumes:
+  pgdata:

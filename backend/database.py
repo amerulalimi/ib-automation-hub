@@ -15,6 +15,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text as sql_text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -37,8 +38,19 @@ class DashboardUser(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True)
     email: Mapped[str] = mapped_column(String, unique=True, nullable=False, index=True)
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    role: Mapped[str] = mapped_column(
+        String, nullable=False, default="viewer"
+    )  # super_admin | admin | viewer
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    max_channels: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    max_ai_tokens_per_month: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    max_scheduled_posts: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    usage_logs: Mapped[list["UsageLog"]] = relationship(
+        "UsageLog", back_populates="user", cascade="all, delete-orphan"
     )
 
 
@@ -47,6 +59,9 @@ class Channel(Base):
     __tablename__ = "channels"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
+    owner_id: Mapped[Optional[str]] = mapped_column(
+        String, ForeignKey("dashboard_users.id", ondelete="SET NULL"), nullable=True
+    )
     name: Mapped[str] = mapped_column(String, nullable=False)
     platform: Mapped[str] = mapped_column(String, nullable=False, default="telegram")
     encrypted_bot_token: Mapped[str] = mapped_column(Text, nullable=False)
@@ -67,6 +82,9 @@ class Channel(Base):
 
     signal_logs: Mapped[list["SignalLog"]] = relationship(
         "SignalLog", back_populates="channel", cascade="all, delete-orphan"
+    )
+    ai_persona: Mapped[Optional["AIPersona"]] = relationship(
+        "AIPersona", back_populates="channel", uselist=False, cascade="all, delete-orphan"
     )
 
 
@@ -185,6 +203,12 @@ class ScheduledContent(Base):
         String, ForeignKey("channels.id", ondelete="CASCADE"), nullable=False
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    post_kind: Mapped[str] = mapped_column(
+        String, nullable=False, default="text", server_default="text"
+    )
+    post_meta: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default=sql_text("'{}'::jsonb")
+    )
     scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     status: Mapped[str] = mapped_column(String, nullable=False, default="pending")
     sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -193,6 +217,53 @@ class ScheduledContent(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class AIPersona(Base):
+    """AI persona settings for a channel."""
+    __tablename__ = "ai_personas"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    channel_id: Mapped[str] = mapped_column(
+        String, ForeignKey("channels.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    tone: Mapped[str] = mapped_column(String, nullable=False)
+    knowledge_base: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    channel: Mapped["Channel"] = relationship("Channel", back_populates="ai_persona")
+
+
+class UsageLog(Base):
+    """Activity/Usage logs for SaaS tracking."""
+    __tablename__ = "usage_logs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[Optional[str]] = mapped_column(
+        String, ForeignKey("dashboard_users.id", ondelete="SET NULL"), nullable=True
+    )
+    action_type: Mapped[str] = mapped_column(String, nullable=False)
+    details: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    user: Mapped[Optional["DashboardUser"]] = relationship("DashboardUser", back_populates="usage_logs")
+
+
+class TelegramClientSession(Base):
+    """Telethon session storage to avoid repeated logins."""
+    __tablename__ = "telegram_client_sessions"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    session_name: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    session_str: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
@@ -206,12 +277,15 @@ _Session = None
 
 
 def _seed_dashboard_user():
-    """Ensure an initial dashboard admin exists (created only if missing)."""
+    """Ensure an initial dashboard user exists (created only if missing)."""
     if _db_engine is None or _Session is None:
         return
-    # Default admin seed (requested)
-    email = "admin@admin.com"
-    password = "Senario@123"
+    email = os.getenv("DASHBOARD_EMAIL")
+    password = os.getenv("DASHBOARD_PASSWORD")
+    if not email or not password:
+        print("[DB] DASHBOARD_EMAIL or DASHBOARD_PASSWORD not set. Skipping seed.")
+        return
+    role = os.getenv("DASHBOARD_ROLE", "super_admin").strip() or "super_admin"
     try:
         import bcrypt
         from sqlalchemy import select
@@ -226,6 +300,8 @@ def _seed_dashboard_user():
                     id=str(uuid.uuid4()),
                     email=email,
                     password_hash=password_hash,
+                    role=role,
+                    is_active=True,
                 )
             )
             session.commit()
@@ -277,26 +353,5 @@ def get_session():
 def _init_db():
     if _db_engine is None:
         return
-    # Create all ORM-defined tables
-    Base.metadata.create_all(bind=_db_engine)
-
-    # knowledge_chunks uses pgvector; create via raw SQL if extension available
-    from sqlalchemy import text
-    try:
-        with _db_engine.connect() as conn:
-            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-            conn.execute(text("""
-                CREATE TABLE IF NOT EXISTS knowledge_chunks (
-                    id TEXT PRIMARY KEY,
-                    channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
-                    content TEXT NOT NULL,
-                    embedding vector(1536),
-                    metadata JSONB,
-                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-                )
-            """))
-            conn.commit()
-    except Exception:
-        pass
-
+    # Schema is managed by Alembic (`alembic upgrade head`). Only seed optional bootstrap user.
     _seed_dashboard_user()

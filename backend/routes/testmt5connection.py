@@ -9,9 +9,12 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Body
 
-import MetaTrader5 as mt5
-
 from models import MT5LoginRequest
+
+try:
+    import MetaTrader5 as mt5
+except ImportError:
+    mt5 = None  # type: ignore[misc, assignment]
 
 
 router = APIRouter(prefix="/api", tags=["MT5 Test"])
@@ -54,6 +57,12 @@ def test_mt5_connection(
     Requires JSON body with account_no, password, broker_server (all non-empty).
     """
     body = _validate_body(body)
+
+    if mt5 is None:
+        raise HTTPException(
+            status_code=501,
+            detail="MetaTrader5 is not available on this platform (install on Windows with MT5 terminal).",
+        )
 
     try:
         login_int = int(body.account_no.strip())

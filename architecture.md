@@ -118,11 +118,14 @@ Model utama:
 - `SourceChannel` (`source_channels`)
 - `ForwardRule` (`forward_rules`)
 - `ScheduledContent` (`scheduled_contents`)
+- `AIPersona` (`ai_personas`) - Tetapan persona AI untuk auto-reply.
+- `UsageLog` (`usage_logs`) - Log aktiviti SaaS (seperti penggunaan AI bot).
+- `TelegramClientSession` (`telegram_client_sessions`)
 
 Fungsi tambahan:
 
 - init schema / startup DB prep;
-- integrasi pgvector table (untuk RAG embeddings).
+- integrasi pgvector table (`knowledge_chunks`) untuk RAG embeddings.
 
 ### 4.4 API Routes
 
@@ -162,15 +165,17 @@ Lokasi: `backend/routes`
 
 - `GET /scheduled-contents`
 - `POST /scheduled-contents`
+- `POST /scheduled-contents/bulk` (AI Bulk Content Generation)
 - `PATCH /scheduled-contents/{content_id}`
 - `DELETE /scheduled-contents/{content_id}`
 
-#### D) AI & RAG - `ai.py`
+#### D) AI, RAG & Signal Parser
 
 - `POST /ai/generate-content`
 - `POST /ai/rag/ingest`
 - `POST /ai/rag/query`
 - `GET /ai/deep-link-info`
+- `POST /api/signal-parser/parse` (Uji parse signal mentah menggunakan AI GPT-4o-mini + hybrid mapping)
 
 #### E) Report & MT5
 
@@ -189,11 +194,12 @@ Lokasi: `backend/routes`
 Lokasi: `backend/services`
 
 - `telethon_client.py` - listener Telegram source channel (Telethon).
-- `signal_parser.py` - parser mesej signal.
+- `signal_parser.py` - parser mesej signal ke format berstruktur. Menerapkan automasi berasaskan GPT-4o-mini dengan hybrid mapping (untuk parsing Gold & instrumen kritikal secara tepat).
 - `forwarder.py` - apply rule forward ke destination channel.
 - `translation.py` - translation pipeline untuk forwarding/content.
-- `ai_content.py` - text/content generation via OpenAI.
+- `ai_content.py` - text/content generation. Mengurus penjanaan secara pukal (umpamanya 30 post serentak) format Markdown yang unik/profesional via OpenAI.
 - `rag.py` - ingest/query embeddings + context answer.
+- `ai_reply.py` - enjin AI Auto-Reply. Menjawab pertanyaan pengguna secara automatik di Telegram berpandukan setting AIPersona (RAG, tone, knowledge base). Menggunakan GPT-4o-mini dengan output ala-manusia.
 - `redis_client.py` - Redis helper (stream/infra ops).
 
 Service sokongan tambahan:
@@ -221,12 +227,12 @@ Service sokongan tambahan:
 4. Optional translation/AI transform diterapkan.
 5. Mesej dihantar ke channel destination.
 
-### 5.3 Content Calendar -> Celery Worker
+### 5.3 Content Calendar (AI Bulk Scheduler) -> Celery Worker
 
-1. User create item di UI (`scheduled_contents`).
-2. Celery beat scan item pending ikut jadual.
-3. Task `send_scheduled_post` push mesej Telegram.
-4. Status item ditukar ke `sent` / `failed`.
+1. User initiate bulk AI content create atau reka satu post di UI. Modul `ai_content.py` memanggil OpenAI untuk membentuk post-post berharga & profesional dan disimpan sebagai item pending (`scheduled_contents`).
+2. Celery beat scan item pending pada sela masa yang secocok.
+3. Task `send_scheduled_post` menolak mesej ke channel Telegram berkenaan.
+4. Status item ditukar ke `sent` / `failed` (beserta log error).
 
 ### 5.4 Report Generation
 
@@ -237,6 +243,14 @@ Service sokongan tambahan:
 **Backend path**
 - Request ke `POST /generate-report` / endpoint MT5 export ->
   backend ambil data (dummy atau MT5) -> build report -> pulangkan output.
+
+### 5.5 AI Auto-Reply Engine (Persona-Based RAG)
+
+1. Channel disetkan dengan maklumat `AIPersona` (tone bahasa + input knowledge base).
+2. Jika ada interaksi / mesej dalam Telegram (atau melalui auto-reply hook), request dihala ke `ai_reply.py`.
+3. Ia menggabungkan konteks RAG dan memanggil GPT-4o-mini.
+4. AI merangka dan memberi balasan natural / layaknya pro tanpa berbunyi robotik.
+5. Log dihantar dan direkodkan sebagai metric dalam `usage_logs`.
 
 ---
 

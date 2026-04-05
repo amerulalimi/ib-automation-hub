@@ -15,7 +15,11 @@ import {
   Download,
   FileUp,
   Settings2,
+  BookOpen,
+  HeartPulse,
+  Users,
 } from "lucide-react";
+import { useAuthStore } from "@/lib/auth-store";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -27,8 +31,12 @@ const NAV_ITEMS = [
   { href: "/dashboard/generatereport", label: "Generate Report", icon: FileUp },
   { href: "/dashboard/generatebyai", label: "Generate Using AI", icon: Settings2 },
   { href: "/dashboard/channels", label: "Channels", icon: Radio },
+  { href: "/dashboard/knowledge-base", label: "Knowledge Base", icon: BookOpen },
   { href: "/dashboard/content-calendar", label: "Content Calendar", icon: Calendar },
   { href: "/dashboard/signals", label: "Signal Logs", icon: ScrollText },
+  { href: "/dashboard/usage-logs", label: "AI Activity Logs", icon: Settings2 },
+  { href: "/dashboard/status", label: "System Status", icon: HeartPulse },
+  { href: "/dashboard/admin", label: "Users & Roles", icon: Users },
   { href: "/dashboard/mt5-tick-history", label: "MT5 History Export", icon: Download },
 ];
 
@@ -41,14 +49,19 @@ export default function DashboardLayout({
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  const setProfile = useAuthStore((s) => s.setProfile);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const res = await fetch(`${BACKEND}/api/auth/me`, { credentials: "include" });
         if (!res.ok) throw new Error("unauth");
+        const data = await res.json();
+        if (!cancelled) setProfile(data);
       } catch {
         if (!cancelled) {
+          setProfile(null);
           router.replace(`/login?callbackUrl=${encodeURIComponent(pathname)}`);
         }
       }
@@ -56,7 +69,7 @@ export default function DashboardLayout({
     return () => {
       cancelled = true;
     };
-  }, [pathname, router]);
+  }, [pathname, router, setProfile]);
 
   const handleSignOut = async () => {
     try {

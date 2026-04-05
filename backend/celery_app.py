@@ -1,4 +1,11 @@
 """Celery app for scheduled content posting (bypass Telegram scheduler limits)."""
+import sys
+from pathlib import Path
+
+# Tasks import `database`, `auth`, etc. as top-level modules; worker cwd/sys.path may omit backend.
+_BACKEND_DIR = str(Path(__file__).resolve().parent)
+sys.path.insert(0, _BACKEND_DIR)
+
 from celery import Celery
 from config import REDIS_URL
 
@@ -25,3 +32,9 @@ app.conf.update(
         },
     },
 )
+
+# prefork/billiard worker pool uses cross-process semaphores; on Windows this often raises
+# PermissionError (WinError 5) on semlock. Use a single-process pool for local dev.
+if sys.platform == "win32":
+    app.conf.worker_pool = "solo"
+    app.conf.worker_concurrency = 1

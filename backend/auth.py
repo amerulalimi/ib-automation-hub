@@ -59,14 +59,14 @@ def _jwt_secret() -> str:
     return s
 
 
-def create_access_token(email: str) -> str:
+def create_access_token(email: str, user_id: str, role: str) -> str:
     try:
         from jose import jwt
     except ImportError:
         raise HTTPException(status_code=500, detail="python-jose not installed")
     expire = datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRE_HOURS)
     return jwt.encode(
-        {"sub": email, "exp": expire},
+        {"sub": email, "uid": user_id, "role": role, "exp": expire},
         _jwt_secret(),
         algorithm=JWT_ALGORITHM,
     )
@@ -93,6 +93,11 @@ def require_auth(
             _jwt_secret(),
             algorithms=[JWT_ALGORITHM],
         )
+        # Legacy tokens (pre-RBAC): treat as admin with no uid until re-login.
+        if not payload.get("role"):
+            payload["role"] = "admin"
+        if "uid" not in payload:
+            payload["uid"] = None
         return payload
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid or expired token")

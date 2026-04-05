@@ -5,8 +5,9 @@ from typing import Optional
 
 from database import get_engine, get_session
 from auth import decrypt_token
-from services.signal_parser import parse_signal_message
-from services.forwarder import forward_parsed_signal
+from services.openai_credentials import get_first_destination_channel_id_for_source
+from services.signal_parser import parse_signal
+from services.forwarder import forward_parsed_signal, process_auto_reply
 from services.redis_client import get_redis
 
 logger = logging.getLogger(__name__)
@@ -23,13 +24,19 @@ def _load_accounts_and_source_channels() -> list[tuple[dict, list[dict]]]:
     try:
         accs = db.execute(
             sqlt("""
-                SELECT id, name, api_id, api_hash, encrypted_session
-                FROM telethon_accounts WHERE is_active = TRUE AND encrypted_session IS NOT NULL
+                SELECT ta.id, ta.name, ta.api_id, ta.api_hash, ta.encrypted_session, tcs.session_str
+                FROM telethon_accounts ta
+                LEFT JOIN telegram_client_sessions tcs ON ta.name = tcs.session_name
+                WHERE ta.is_active = TRUE
             """)
         ).fetchall()
         result = []
         for a in accs:
             acc_id = a[0]
+            # Prioritize session_str from the new table if present
+            raw_session = a[5] or a[4] 
+            if not raw_session:
+                continue
             sources = db.execute(
                 sqlt("""
                     SELECT id, name, telegram_chat_id FROM source_channels
@@ -39,7 +46,7 @@ def _load_accounts_and_source_channels() -> list[tuple[dict, list[dict]]]:
             ).fetchall()
             result.append(
                 (
-                    {"id": a[0], "name": a[1], "api_id": a[2], "api_hash": a[3], "encrypted_session": a[4]},
+                    {"id": a[0], "name": a[1], "api_id": a[2], "api_hash": a[3], "session": raw_session},
                     [{"id": s[0], "name": s[1], "telegram_chat_id": s[2]} for s in sources],
                 )
             )
@@ -49,39 +56,48 @@ def _load_accounts_and_source_channels() -> list[tuple[dict, list[dict]]]:
 
 
 async def _on_message(event, chat_to_source_id: dict[str, str]):
-    """Handle NewMessage: parse, cache to Redis, then forward."""
+    """Handle NewMessage: parse signal OR auto-reply if chatter."""
     try:
         chat_id_str = str(event.chat_id)
         source_channel_id = chat_to_source_id.get(chat_id_str)
         if not source_channel_id:
             return
         text = event.message.text or ""
-        parsed = parse_signal_message(text)
-        if not parsed:
-            return
 
-        # Cache parsed signal into Redis stream for background workers / auditing
-        try:
-            redis = get_redis()
-            await redis.xadd(
-                "telethon:signals",
-                {
-                    "source_channel_id": source_channel_id,
-                    "symbol": parsed.get("symbol", ""),
-                    "type": parsed.get("type", ""),
-                    "action": parsed.get("action", ""),
-                    "entry": str(parsed.get("entry", "")),
-                    "sl": str(parsed.get("sl", "")),
-                    "tp": str(parsed.get("tp", "")),
-                    "raw": text,
-                },
-            )
-        except Exception as e:  # Redis failure must not break live forwarding
-            logger.warning("Failed to cache signal in Redis: %s", e)
+        cred_channel_id = await asyncio.to_thread(
+            get_first_destination_channel_id_for_source, source_channel_id
+        )
 
-        await forward_parsed_signal(source_channel_id, parsed)
+        # 1. Try to parse as signal
+        parsed = await parse_signal(text, credentials_channel_id=cred_channel_id)
+        
+        if parsed and parsed.get("is_signal"):
+            # It's a signal -> Forward it
+            try:
+                redis = get_redis()
+                await redis.xadd(
+                    "telethon:signals",
+                    {
+                        "source_channel_id": source_channel_id,
+                        "symbol": parsed.get("pair", ""),
+                        "type": parsed.get("order_type", ""),
+                        "action": "OPEN", # Default for new signals
+                        "entry": str(parsed.get("entry", "")),
+                        "sl": str(parsed.get("sl", "")),
+                        "tp": str(parsed.get("tp", "")),
+                        "raw": text,
+                    },
+                )
+            except Exception as e:
+                logger.warning("Failed to cache signal in Redis: %s", e)
+
+            await forward_parsed_signal(source_channel_id, parsed)
+        else:
+            # Not a signal -> Check for AI Auto-Reply (chatter/questions)
+            await process_auto_reply(source_channel_id, text)
+            
     except Exception as e:
-        logger.exception("Forwarder on_message error: %s", e)
+        logger.exception("Telethon _on_message error: %s", e)
 
 
 async def start_listener() -> None:
@@ -107,7 +123,14 @@ async def start_listener() -> None:
         if acc_id in _clients:
             continue
         try:
-            session_str = decrypt_token(account["encrypted_session"])
+            # Check if it looks like an encrypted token or a raw session string
+            session_data = account["session"]
+            try:
+                session_str = decrypt_token(session_data)
+            except Exception:
+                # If decryption fails, assume it's already a raw session string from the new table
+                session_str = session_data
+
             client = TelegramClient(
                 StringSession(session_str),
                 account["api_id"],

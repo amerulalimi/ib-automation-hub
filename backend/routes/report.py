@@ -5,7 +5,6 @@ from fastapi import APIRouter, HTTPException
 from sqlalchemy import text
 
 from models import GenerateReportRequest, HealthResponse
-from config import OPENAI_API_KEY
 from report_builder import build_html
 from dummy_trades import generate_dummy_trades
 
@@ -19,14 +18,26 @@ def root():
 
 @router.get("/health", response_model=HealthResponse)
 def health_check():
-    from config import DATABASE_URL
+    from config import DATABASE_URL, REDIS_URL
     from database import get_engine
 
-    ai_status = (
-        "configured"
-        if (OPENAI_API_KEY and OPENAI_API_KEY != "your_openai_api_key_here")
-        else "not_configured (fallback mode)"
-    )
+    ai_status = "not_configured"
+    if DATABASE_URL:
+        try:
+            from database import get_session
+            from services.openai_credentials import count_ai_configs_any
+
+            db = get_session()
+            try:
+                ai_status = (
+                    "configured"
+                    if count_ai_configs_any(db) > 0
+                    else "not_configured"
+                )
+            finally:
+                db.close()
+        except Exception:
+            ai_status = "unknown"
     db_status = "not_configured"
     if DATABASE_URL:
         try:
@@ -39,9 +50,43 @@ def health_check():
                 db_status = "unavailable"
         except Exception:
             db_status = "error"
+
+    redis_status = "skipped"
+    try:
+        import redis as redis_lib
+
+        r = redis_lib.from_url(REDIS_URL, decode_responses=True)
+        try:
+            redis_status = "ok" if r.ping() else "error"
+        finally:
+            r.close()
+    except Exception:
+        redis_status = "error"
+
+    celery_status = "unknown"
+    try:
+        from celery_app import app as celery_app
+
+        insp = celery_app.control.inspect(timeout=1.0)
+        active = insp.active() if insp else None
+        celery_status = "workers_ok" if active else "no_workers"
+    except Exception:
+        celery_status = "unreachable"
+
+    try:
+        from services.telethon_client import is_running as telethon_running
+
+        telethon_status = "running" if telethon_running() else "stopped"
+    except Exception:
+        telethon_status = "unknown"
+
+    degraded = db_status not in ("not_configured", "connected") or redis_status == "error"
     return {
-        "status": "ok" if db_status in ("not_configured", "connected") else "degraded",
-        "message": f"Server healthy | DB: {db_status} | OpenAI: {ai_status}",
+        "status": "ok" if not degraded else "degraded",
+        "message": (
+            f"DB: {db_status} | Redis: {redis_status} | Celery: {celery_status} | "
+            f"Telethon: {telethon_status} | OpenAI: {ai_status}"
+        ),
     }
 
 

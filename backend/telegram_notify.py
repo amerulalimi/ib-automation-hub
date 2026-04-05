@@ -35,7 +35,13 @@ def send_telegram(bot_token: str, chat_id: str, text: str) -> dict:
             "error": f"Missing required field(s): {', '.join(missing)}",
         }
 
-    print(f"Sending telegram message to {chat_id}: {text} using bot token: {bot_token}")
+    import logging
+
+    logging.getLogger(__name__).info(
+        "Sending telegram message to chat_id=%s (token_suffix=%s)",
+        chat_id,
+        bot_token[-6:] if len(bot_token) > 6 else "****",
+    )
     try:
         import httpx
 
@@ -43,6 +49,89 @@ def send_telegram(bot_token: str, chat_id: str, text: str) -> dict:
             f"https://api.telegram.org/bot{bot_token}/sendMessage",
             json={"chat_id": chat_id, "text": text, "parse_mode": "Markdown"},
             timeout=10,
+        )
+        data = r.json()
+        if data.get("ok"):
+            return {"ok": True}
+        return {"ok": False, "error": data.get("description", "Unknown Telegram error")}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+def send_telegram_photo(
+    bot_token: str,
+    chat_id: str,
+    photo_url: str,
+    caption: str = "",
+) -> dict:
+    missing = []
+    if not bot_token:
+        missing.append("bot_token")
+    if not chat_id:
+        missing.append("chat_id")
+    if not photo_url:
+        missing.append("photo_url")
+    if missing:
+        return {
+            "ok": False,
+            "error": f"Missing required field(s): {', '.join(missing)}",
+        }
+    try:
+        import httpx
+
+        payload: dict = {"chat_id": chat_id, "photo": photo_url}
+        cap = (caption or "").strip()
+        if cap:
+            payload["caption"] = cap
+            payload["parse_mode"] = "Markdown"
+        r = httpx.post(
+            f"https://api.telegram.org/bot{bot_token}/sendPhoto",
+            json=payload,
+            timeout=30,
+        )
+        data = r.json()
+        if data.get("ok"):
+            return {"ok": True}
+        return {"ok": False, "error": data.get("description", "Unknown Telegram error")}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+def send_telegram_poll(
+    bot_token: str,
+    chat_id: str,
+    question: str,
+    options: list[str],
+    is_anonymous: bool = True,
+    allows_multiple_answers: bool = False,
+) -> dict:
+    missing = []
+    if not bot_token:
+        missing.append("bot_token")
+    if not chat_id:
+        missing.append("chat_id")
+    if not question:
+        missing.append("question")
+    if not options or len(options) < 2:
+        missing.append("options")
+    if missing:
+        return {
+            "ok": False,
+            "error": f"Missing required field(s): {', '.join(missing)}",
+        }
+    try:
+        import httpx
+
+        r = httpx.post(
+            f"https://api.telegram.org/bot{bot_token}/sendPoll",
+            json={
+                "chat_id": chat_id,
+                "question": question,
+                "options": options,
+                "is_anonymous": is_anonymous,
+                "allows_multiple_answers": allows_multiple_answers,
+            },
+            timeout=30,
         )
         data = r.json()
         if data.get("ok"):
